@@ -35,6 +35,9 @@ type wsClient struct {
 
 	// The sender is responsible for sending portion of the OpAMP protocol.
 	sender *internal.WSSender
+
+	procCtx    context.Context
+	procCancel context.CancelFunc
 }
 
 // NewWebSocket creates a new OpAMP Client that uses WebSocket transport.
@@ -85,11 +88,16 @@ func (c *wsClient) Stop(ctx context.Context) error {
 	conn := c.conn
 	c.connMutex.RUnlock()
 
+	c.procCancel()
+	_ = c.common.Stop(c.procCtx)
 	if conn != nil {
+		c.sender.WaitToStop()
+		conn.WriteMessage(websocket.CloseMessage, websocket.FormatCloseMessage(websocket.CloseNormalClosure, ""))
 		_ = conn.Close()
 	}
 
-	return c.common.Stop(ctx)
+	// ctx, _ = context.WithTimeout(ctx, 3*time.Second)
+	return nil
 }
 
 func (c *wsClient) AgentDescription() *protobufs.AgentDescription {
@@ -218,6 +226,8 @@ func (c *wsClient) runOneCycle(ctx context.Context) {
 
 	// Create a cancellable context for background processors.
 	procCtx, procCancel := context.WithCancel(ctx)
+	c.procCtx = procCtx
+	c.procCancel = procCancel
 
 	// Connected successfully. Start the sender. This will also send the first
 	// status report.
@@ -229,6 +239,8 @@ func (c *wsClient) runOneCycle(ctx context.Context) {
 		return
 	}
 
+	c.common.Logger.Debugf("Created sender")
+
 	// First status report sent. Now loop to receive and process messages.
 	r := internal.NewWSReceiver(
 		c.common.Logger,
@@ -239,7 +251,12 @@ func (c *wsClient) runOneCycle(ctx context.Context) {
 		c.common.PackagesStateProvider,
 		c.common.Capabilities,
 	)
-	r.ReceiverLoop(ctx)
+
+	c.common.Logger.Debugf("Created receiver")
+
+	r.ReceiverLoop(procCtx)
+
+	c.common.Logger.Debugf(("Cleaning up"))
 
 	// Stop the background processors.
 	procCancel()
