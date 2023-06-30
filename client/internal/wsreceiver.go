@@ -53,6 +53,10 @@ out:
 			if ctx.Err() == nil && !websocket.IsCloseError(err, websocket.CloseNormalClosure) {
 				r.logger.Errorf("Unexpected error while receiving: %v", err)
 			}
+
+			if websocket.IsCloseError(err, websocket.CloseNormalClosure) {
+				r.logger.Debugf("Disconnected from server")
+			}
 			break out
 		} else {
 			r.processor.ProcessReceivedMessage(runContext, &message)

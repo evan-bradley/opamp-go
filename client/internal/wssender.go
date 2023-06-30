@@ -2,6 +2,7 @@ package internal
 
 import (
 	"context"
+	"fmt"
 
 	"github.com/gorilla/websocket"
 	"google.golang.org/protobuf/proto"
@@ -75,8 +76,10 @@ func (s *WSSender) sendNextMessage() error {
 func (s *WSSender) sendMessage(msg *protobufs.AgentToServer) error {
 	if err := internal.WriteWSMessage(s.conn, msg); err != nil {
 		s.logger.Errorf("Cannot write WS message: %v", err)
+		fmt.Printf("Failure: %+v\n", msg)
 		// TODO: check if it is a connection error then propagate error back to Client and reconnect.
 		return err
 	}
+	fmt.Printf("Success: %+v\n", msg)
 	return nil
 }
